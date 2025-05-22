@@ -1,4 +1,4 @@
-
+Sure! Here’s the full README.md in Markdown format:
 
 # YouTube Downloader 🎥⬇️
 
@@ -14,7 +14,7 @@ A simple Python-based CLI tool to download YouTube videos or extract audio using
 ## Requirements
 
 - Python 3.7+
-- pytube
+- `pytube`
 
 ## Installation
 
@@ -57,9 +57,8 @@ Done!
 Notes
 	•	Downloaded files are saved in the same directory as the script.
 	•	Some high-resolution videos may not be available depending on the source.
+	•	Make sure the video is public and not age-restricted.
 
 License
 
 This project is licensed under the MIT License.
-
-Let me know if you want this turned into a GUI, bundled with `tkinter`, or converted to a desktop app with PyInstaller.
