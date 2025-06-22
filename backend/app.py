@@ -1,6 +1,6 @@
 import os
 import subprocess
-from fastapi import FastAPI, HTTPException, Request # <<< IMPORT Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -10,25 +10,10 @@ from yt_dlp import YoutubeDL
 DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-# Path to cookies.txt (should be in same directory as this script)
+# Path to cookies.txt
 COOKIES_PATH = os.path.join(os.path.dirname(__file__), "cookies.txt")
 
 app = FastAPI()
-
-# <<< NEW MIDDLEWARE TO LOG REQUESTS >>>
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    # This middleware will run for EVERY request
-    if request.method == "POST":
-        body = await request.body()
-        print(f"REQUEST BODY RECEIVED: {body.decode('utf-8')}") # Log the body
-        # This part is tricky but necessary to "re-stream" the body for the endpoint
-        async def receive_():
-            return {"type": "http.request", "body": body}
-        request = Request(request.scope, receive=receive_)
-
-    response = await call_next(request)
-    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,18 +23,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Your models MUST match what the frontend sends
+# <<< FINAL FIX: Using optional fields with defaults is the most robust method >>>
 class DownloadRequest(BaseModel):
     video_url: str
-    format: str
-    quality: str
+    format: str = 'mp4'
+    quality: str = '720p'
 
 class ClipRequest(BaseModel):
     video_url: str
     start_time: str
     end_time: str
-    format: str
-    quality: str
+    format: str = 'mp4'
+    quality: str = '720p'
+
 
 @app.post("/api/download")
 async def download_video( DownloadRequest):
@@ -58,7 +44,7 @@ async def download_video( DownloadRequest):
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
 
     try:
-        print("Download requested for:", video_url)
+        print(f"Download request received: URL={data.video_url}, Format={data.format}, Quality={data.quality}")
         ydl_opts = {
             "format": "bestvideo+bestaudio/best",
             "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
@@ -89,7 +75,7 @@ async def clip_video( ClipRequest):
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL, start time, and end time.")
 
     try:
-        print(f"Clip requested for: {video_url} | {start_time} - {end_time}")
+        print(f"Clip request received: URL={data.video_url} | {start_time}-{end_time}")
         temp_filename = os.path.join(DOWNLOADS_DIR, "temp_for_clip.mp4")
         ydl_opts = {
             "format": "bestvideo+bestaudio/best",
@@ -107,8 +93,11 @@ async def clip_video( ClipRequest):
         clip_filepath = os.path.join(DOWNLOADS_DIR, clip_filename)
 
         ffmpeg_cmd = ["ffmpeg", "-y", "-i", temp_filename, "-ss", start_time, "-to", end_time, "-c", "copy", clip_filepath]
-        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
+        result = subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
         
+        if result.returncode != 0 or not os.path.exists(clip_filepath):
+            raise Exception(f"FFmpeg failed to create the clip. Stderr: {result.stderr}")
+
         os.remove(temp_filename)
         
         return {
@@ -133,4 +122,3 @@ async def download_file(filename: str):
 @app.get("/")
 async def root():
     return {"message": "FastAPI backend running!"}
-
