@@ -27,6 +27,8 @@ app.add_middleware(
 
 class DownloadRequest(BaseModel):
     video_url: str
+    format: str = "mp4"
+    quality: str = "720p"
 
 class ClipRequest(BaseModel):
     video_url: str
