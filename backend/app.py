@@ -1,6 +1,6 @@
 import os
 import subprocess
-from fastapi import FastAPI, HTTPException, Request # Need Request for middleware if used
+from fastapi import FastAPI, HTTPException, Request, Body # <<< IMPORT Body HERE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -23,7 +23,7 @@ async def log_requests(request: Request, call_next):
         try:
             body = await request.body()
             print(f"REQUEST BODY RECEIVED: {body.decode('utf-8')}")
-            # Re-stream the body for the actual endpoint handler
+            # This part is tricky but necessary to "re-stream" the body for the endpoint
             async def receive_():
                 return {"type": "http.request", "body": body}
             request = Request(request.scope, receive=receive_)
@@ -55,7 +55,7 @@ class ClipRequest(BaseModel):
 
 
 @app.post("/api/download")
-async def download_video( DownloadRequest):  # <<<<<<<<<<<<<<<< THIS IS THE CRITICAL FIX
+async def download_video( DownloadRequest = Body(...)):  # <<<<<<<<<<<<<<<< THE FIX IS HERE
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -84,7 +84,7 @@ async def download_video( DownloadRequest):  # <<<<<<<<<<<<<<<< THIS IS THE CRIT
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest): # <<<<<<<<<<<<<<<< THIS IS THE CRITICAL FIX
+async def clip_video( ClipRequest = Body(...)): # <<<<<<<<<<<<<<<< THE FIX IS HERE
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
@@ -110,8 +110,11 @@ async def clip_video( ClipRequest): # <<<<<<<<<<<<<<<< THIS IS THE CRITICAL FIX
         clip_filepath = os.path.join(DOWNLOADS_DIR, clip_filename)
 
         ffmpeg_cmd = ["ffmpeg", "-y", "-i", temp_filename, "-ss", start_time, "-to", end_time, "-c", "copy", clip_filepath]
-        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
+        result = subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
         
+        if result.returncode != 0 or not os.path.exists(clip_filepath):
+            raise Exception(f"FFmpeg failed to create the clip. Stderr: {result.stderr}")
+
         os.remove(temp_filename)
         
         return {
