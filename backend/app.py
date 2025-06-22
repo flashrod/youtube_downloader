@@ -1,6 +1,6 @@
 import os
 import subprocess
-from fastapi import FastAPI, HTTPException, Request # <<< FIX HERE: Import Request
+from fastapi import FastAPI, HTTPException, Request # <<< IMPORT Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -15,6 +15,21 @@ COOKIES_PATH = os.path.join(os.path.dirname(__file__), "cookies.txt")
 
 app = FastAPI()
 
+# <<< NEW MIDDLEWARE TO LOG REQUESTS >>>
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # This middleware will run for EVERY request
+    if request.method == "POST":
+        body = await request.body()
+        print(f"REQUEST BODY RECEIVED: {body.decode('utf-8')}") # Log the body
+        # This part is tricky but necessary to "re-stream" the body for the endpoint
+        async def receive_():
+            return {"type": "http.request", "body": body}
+        request = Request(request.scope, receive=receive_)
+
+    response = await call_next(request)
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# <<< FIX HERE: Your models MUST match what the frontend sends
+# Your models MUST match what the frontend sends
 class DownloadRequest(BaseModel):
     video_url: str
     format: str
@@ -37,10 +52,7 @@ class ClipRequest(BaseModel):
     quality: str
 
 @app.post("/api/download")
-async def download_video( DownloadRequest, request: Request): # <<< FIX HERE: Added request: Request
-    # This log will show you EXACTLY what data your backend is receiving
-    print(f"DEBUG: RAW BODY RECEIVED for /api/download: {await request.body()}")
-
+async def download_video( DownloadRequest):
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -69,10 +81,7 @@ async def download_video( DownloadRequest, request: Request): # <<< FIX HERE: Ad
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest, request: Request): # <<< FIX HERE: Added request: Request
-    # This log will show you EXACTLY what data your backend is receiving
-    print(f"DEBUG: RAW BODY RECEIVED for /api/clip: {await request.body()}")
-    
+async def clip_video( ClipRequest):
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
@@ -124,3 +133,4 @@ async def download_file(filename: str):
 @app.get("/")
 async def root():
     return {"message": "FastAPI backend running!"}
+
