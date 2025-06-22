@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+.eggs/
+*.egg
+*.env
+.env
+.venv
+venv/
+ENV/
+env/
+Pipfile.lock
+pip-wheel-metadata/
+site/
+dist/
+build/
+*.log
+
+# FastAPI/Flask
+instance/
+uploads/
+downloads/
+
+# VSCode/PyCharm/Editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uvicorn/Starlette logs
+*.db
+
+# Test output
+coverage/
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+
+# Misc
+*.swp
