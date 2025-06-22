@@ -197,10 +197,10 @@ export const DownloaderForm = () => {
               Format
             </label>
             <Select value={format} onValueChange={setFormat} disabled={isLoading}>
-              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 backdrop-blur-md hover:bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 shadow text-base font-semibold">
+              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 dark:bg-[#23263a] dark:border-blue-900 dark:text-white backdrop-blur-md hover:bg-blue-50 dark:hover:bg-[#2d314d] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 dark:focus:ring-blue-500 dark:focus:border-blue-500 transition-all duration-200 shadow text-base font-semibold">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 shadow-xl mt-1">
+              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 dark:bg-[#23263a] dark:border-blue-900 dark:text-white shadow-xl mt-1 transition-all duration-200">
                 <SelectItem value="mp4">
                   <div className="flex items-center space-x-2">
                     <span>MP4</span>
@@ -227,10 +227,10 @@ export const DownloaderForm = () => {
               Quality
             </label>
             <Select value={quality} onValueChange={setQuality} disabled={isLoading}>
-              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 backdrop-blur-md hover:bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 shadow text-base font-semibold">
+              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 dark:bg-[#23263a] dark:border-blue-900 dark:text-white backdrop-blur-md hover:bg-blue-50 dark:hover:bg-[#2d314d] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 dark:focus:ring-blue-500 dark:focus:border-blue-500 transition-all duration-200 shadow text-base font-semibold">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 shadow-xl mt-1">
+              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 dark:bg-[#23263a] dark:border-blue-900 dark:text-white shadow-xl mt-1 transition-all duration-200">
                 <SelectItem value="1080p">
                   <div className="flex items-center space-x-2">
                     <span>1080p</span>
