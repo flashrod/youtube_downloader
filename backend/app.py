@@ -1,6 +1,7 @@
 import os
 import glob
 import time
+import subprocess
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -38,8 +39,9 @@ async def download_video(data: DownloadRequest):
     try:
         print("Download requested for:", video_url)
         ydl_opts = {
-            "format": "best",
+            "format": "bestvideo+bestaudio/best",
             "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
+            "merge_output_format": "mp4",
         }
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
@@ -67,36 +69,53 @@ async def clip_video(data: ClipRequest):
     try:
         print(f"Clip requested for: {video_url} | {start_time} - {end_time}")
         print("Files BEFORE yt-dlp:", os.listdir(DOWNLOADS_DIR))
-        section_string = f"*{start_time}-{end_time}"
+        # Download to a temp file for clipping
+        temp_filename = os.path.join(DOWNLOADS_DIR, "temp_for_clip.mp4")
         ydl_opts = {
-            "format": "best",
-            "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
-            "download_sections": [section_string]
+            "format": "bestvideo+bestaudio/best",
+            "outtmpl": temp_filename,
+            "merge_output_format": "mp4",
+            "noplaylist": True,
+            "socket_timeout": 30,
+            "retries": 10,
+            "fragment_retries": 20,
         }
         print("yt-dlp options:", ydl_opts)
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
-            print("yt-dlp info_dict:", info_dict)
-            video_title = info_dict.get("title", "video")
-            base_name = os.path.splitext(ydl.prepare_filename(info_dict))[0]
-            time.sleep(2)  # Give ffmpeg a moment to finish writing files
-            print("Files AFTER yt-dlp:", os.listdir(DOWNLOADS_DIR))
-            # Try .clip.* first, fallback to .temp.* if needed
-            clip_files = glob.glob(f"{base_name}.clip.*")
-            if not clip_files:
-                print("No .clip. file found, trying .temp.*")
-                clip_files = glob.glob(f"{base_name}.temp.*")
-            print("Clip files found:", clip_files)
-            clip_filename = os.path.basename(clip_files[0]) if clip_files else None
+            video_title = info_dict.get("title", "clip")
+        print("Files AFTER yt-dlp:", os.listdir(DOWNLOADS_DIR))
 
-        if not clip_filename:
-            raise HTTPException(
-                status_code=500,
-                detail="Clipped file was not created. Check FFmpeg installation, yt-dlp version, and section range."
-            )
+        # Make safe output name for the clip
+        safe_title = "".join(c for c in video_title if c.isalnum() or c in " .-_").rstrip()
+        clip_filename = f"{safe_title}.clip.mp4"
+        clip_filepath = os.path.join(DOWNLOADS_DIR, clip_filename)
+
+        # Clip with ffmpeg
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-i", temp_filename,
+            "-ss", start_time,
+            "-to", end_time,
+            "-c", "copy",
+            clip_filepath
+        ]
+        print("FFmpeg command:", " ".join(ffmpeg_cmd))
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        print("FFmpeg stdout:", result.stdout)
+        print("FFmpeg stderr:", result.stderr)
+        if result.returncode != 0 or not os.path.exists(clip_filepath):
+            raise Exception("FFmpeg failed to create the clip.")
+
+        # Remove the temp file
+        try:
+            os.remove(temp_filename)
+            print(f"Deleted temp file: {temp_filename}")
+        except Exception as e:
+            print(f"Warning: Could not delete temp file: {e}")
 
         return {
-            "message": "Clipped video downloaded successfully!",
+            "message": "Clipped video created successfully!",
             "title": video_title,
             "filename": clip_filename,
             "start_time": start_time,
