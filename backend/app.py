@@ -1,6 +1,6 @@
 import os
 import subprocess
-from fastapi import FastAPI, HTTPException, Request, Body # <<< IMPORT Body HERE
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -10,27 +10,10 @@ from yt_dlp import YoutubeDL
 DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-# Path to cookies.txt (should be in same directory as this script)
+# Path to cookies.txt
 COOKIES_PATH = os.path.join(os.path.dirname(__file__), "cookies.txt")
 
 app = FastAPI()
-
-# IMPORTANT: Keep this middleware if you want to see the request body in logs
-# but remove it if it still causes issues after the main fix.
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    if request.method == "POST":
-        try:
-            body = await request.body()
-            print(f"REQUEST BODY RECEIVED: {body.decode('utf-8')}")
-            # This part is tricky but necessary to "re-stream" the body for the endpoint
-            async def receive_():
-                return {"type": "http.request", "body": body}
-            request = Request(request.scope, receive=receive_)
-        except Exception as e:
-            print(f"Error logging request body: {e}")
-    response = await call_next(request)
-    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Your models MUST match what the frontend sends
 class DownloadRequest(BaseModel):
     video_url: str
     format: str = 'mp4'
@@ -55,7 +37,7 @@ class ClipRequest(BaseModel):
 
 
 @app.post("/api/download")
-async def download_video( DownloadRequest = Body(...)):  # <<<<<<<<<<<<<<<< THE FIX IS HERE
+async def download_video( DownloadRequest):  # <<< THIS IS THE FIX
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -84,7 +66,7 @@ async def download_video( DownloadRequest = Body(...)):  # <<<<<<<<<<<<<<<< THE 
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest = Body(...)): # <<<<<<<<<<<<<<<< THE FIX IS HERE
+async def clip_video( ClipRequest):      # <<< AND THIS IS THE FIX
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
