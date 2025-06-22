@@ -1,6 +1,6 @@
 import os
 import subprocess
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request # <<< FIX HERE: Import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -23,22 +23,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# <<< FIX HERE: Your models MUST match what the frontend sends
 class DownloadRequest(BaseModel):
     video_url: str
-    format: str = "mp4"
-    quality: str = "720p"
+    format: str
+    quality: str
 
 class ClipRequest(BaseModel):
     video_url: str
-    start_time: str  # e.g. "00:01:00"
-    end_time: str    # e.g. "00:02:00"
-    format: str = "mp4"
-    quality: str = "720p"
+    start_time: str
+    end_time: str
+    format: str
+    quality: str
 
 @app.post("/api/download")
-async def download_video( DownloadRequest, request: Request):
-    # Log the incoming request body for debugging
-    print(f"Incoming /api/download request: {await request.body()}")
+async def download_video( DownloadRequest, request: Request): # <<< FIX HERE: Added request: Request
+    # This log will show you EXACTLY what data your backend is receiving
+    print(f"DEBUG: RAW BODY RECEIVED for /api/download: {await request.body()}")
+
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -67,9 +69,10 @@ async def download_video( DownloadRequest, request: Request):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest, request: Request):
-    # Log the incoming request body for debugging
-    print(f"Incoming /api/clip request: {await request.body()}")
+async def clip_video( ClipRequest, request: Request): # <<< FIX HERE: Added request: Request
+    # This log will show you EXACTLY what data your backend is receiving
+    print(f"DEBUG: RAW BODY RECEIVED for /api/clip: {await request.body()}")
+    
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
@@ -78,53 +81,27 @@ async def clip_video( ClipRequest, request: Request):
 
     try:
         print(f"Clip requested for: {video_url} | {start_time} - {end_time}")
-        print("Files BEFORE yt-dlp:", os.listdir(DOWNLOADS_DIR))
-        # Download to a temp file for clipping
         temp_filename = os.path.join(DOWNLOADS_DIR, "temp_for_clip.mp4")
         ydl_opts = {
             "format": "bestvideo+bestaudio/best",
             "outtmpl": temp_filename,
             "merge_output_format": data.format,
             "noplaylist": True,
-            "socket_timeout": 30,
-            "retries": 10,
-            "fragment_retries": 20,
             "cookiefile": COOKIES_PATH,
         }
-        print("yt-dlp options:", ydl_opts)
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
             video_title = info_dict.get("title", "clip")
-        print("Files AFTER yt-dlp:", os.listdir(DOWNLOADS_DIR))
-
-        # Make safe output name for the clip
+        
         safe_title = "".join(c for c in video_title if c.isalnum() or c in " .-_").rstrip()
         clip_filename = f"{safe_title}.clip.mp4"
         clip_filepath = os.path.join(DOWNLOADS_DIR, clip_filename)
 
-        # Clip with ffmpeg
-        ffmpeg_cmd = [
-            "ffmpeg", "-y",
-            "-i", temp_filename,
-            "-ss", start_time,
-            "-to", end_time,
-            "-c", "copy",
-            clip_filepath
-        ]
-        print("FFmpeg command:", " ".join(ffmpeg_cmd))
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-        print("FFmpeg stdout:", result.stdout)
-        print("FFmpeg stderr:", result.stderr)
-        if result.returncode != 0 or not os.path.exists(clip_filepath):
-            raise Exception("FFmpeg failed to create the clip.")
-
-        # Remove the temp file
-        try:
-            os.remove(temp_filename)
-            print(f"Deleted temp file: {temp_filename}")
-        except Exception as e:
-            print(f"Warning: Could not delete temp file: {e}")
-
+        ffmpeg_cmd = ["ffmpeg", "-y", "-i", temp_filename, "-ss", start_time, "-to", end_time, "-c", "copy", clip_filepath]
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
+        
+        os.remove(temp_filename)
+        
         return {
             "message": "Clipped video created successfully!",
             "title": video_title,

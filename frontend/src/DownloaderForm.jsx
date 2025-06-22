@@ -8,16 +8,18 @@ import { Youtube, Download, CheckCircle, AlertCircle, Loader2 } from 'lucide-rea
 import { useToast } from '@/hooks/use-toast';
 
 export const DownloaderForm = () => {
-  const [tab, setTab] = useState('download'); // 'download' or 'clip'
+  const [tab, setTab] = useState('download');
   const [url, setUrl] = useState('');
   const [format, setFormat] = useState('mp4');
   const [quality, setQuality] = useState('720p');
-  const [start, setStart] = useState(''); // for clip
-  const [end, setEnd] = useState('');     // for clip
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState('idle');
   const [downloadLink, setDownloadLink] = useState(null);
   const { toast } = useToast();
+
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   const handleDownload = async (e) => {
     if (e) e.preventDefault();
@@ -29,19 +31,13 @@ export const DownloaderForm = () => {
       });
       return;
     }
-    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-      toast({
-        title: "Invalid URL",
-        description: "Please enter a valid YouTube URL.",
-        variant: "destructive",
-      });
-      return;
-    }
+    
     setIsLoading(true);
     setDownloadStatus('processing');
     setDownloadLink(null);
+    
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/download`, {
+      const response = await fetch(`${API_URL}/api/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,20 +46,30 @@ export const DownloaderForm = () => {
           quality,
         }),
       });
+      
       const data = await response.json();
+      
       if (!response.ok) {
         throw new Error(data.detail || data.error || "Unknown error");
       }
+      
       setDownloadStatus('success');
-      setDownloadLink(`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`);
+      setDownloadLink(`${API_URL}/api/download-file/${data.filename}`);
+      
       toast({
         title: "Download Ready!",
         description: (
-          <a href={`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+          <a 
+            href={`${API_URL}/api/download-file/${data.filename}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
             Click here to download: {data.title || data.filename}
           </a>
         ),
       });
+      
       setTimeout(() => {
         setDownloadStatus('idle');
         setUrl('');
@@ -90,19 +96,14 @@ export const DownloaderForm = () => {
       });
       return;
     }
-    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-      toast({
-        title: "Invalid URL",
-        description: "Please enter a valid YouTube URL.",
-        variant: "destructive",
-      });
-      return;
-    }
+    
     setIsLoading(true);
     setDownloadStatus('processing');
     setDownloadLink(null);
+    
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clip`, {
+      const response = await fetch(`${API_URL}/api/clip`, {
+        method: 'POST', // Fixed missing method
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_url: url,
@@ -112,20 +113,30 @@ export const DownloaderForm = () => {
           quality,
         }),
       });
+      
       const data = await response.json();
+      
       if (!response.ok) {
         throw new Error(data.detail || data.error || "Unknown error");
       }
+      
       setDownloadStatus('success');
-      setDownloadLink(`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`);
+      setDownloadLink(`${API_URL}/api/download-file/${data.filename}`);
+      
       toast({
         title: "Clip Ready!",
         description: (
-          <a href={`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+          <a 
+            href={`${API_URL}/api/download-file/${data.filename}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
             Click here to download your clip
           </a>
         ),
       });
+      
       setTimeout(() => {
         setDownloadStatus('idle');
         setUrl('');
@@ -156,6 +167,7 @@ export const DownloaderForm = () => {
           `}
           onClick={() => setTab('download')}
           type="button"
+          aria-pressed={tab === 'download'}
         >
           Download Full Video
         </button>
@@ -167,6 +179,7 @@ export const DownloaderForm = () => {
           `}
           onClick={() => setTab('clip')}
           type="button"
+          aria-pressed={tab === 'clip'}
         >
           Clip Video
         </button>
@@ -187,6 +200,7 @@ export const DownloaderForm = () => {
               onChange={(e) => setUrl(e.target.value)}
               className="pl-12 h-14 text-lg border-2 border-white/10 bg-white/5 backdrop-blur-sm focus:border-red-400 focus:bg-white/10 transition-all duration-300"
               disabled={isLoading}
+              aria-label="YouTube URL"
             />
           </div>
         </div>
@@ -197,7 +211,7 @@ export const DownloaderForm = () => {
             </label>
             <Select value={format} onValueChange={setFormat} disabled={isLoading}>
               <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 dark:bg-[#23263a] dark:border-blue-900 dark:text-white backdrop-blur-md hover:bg-blue-50 dark:hover:bg-[#2d314d] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 dark:focus:ring-blue-500 dark:focus:border-blue-500 transition-all duration-200 shadow text-base font-semibold">
-                <SelectValue />
+                <SelectValue placeholder="Select format" />
               </SelectTrigger>
               <SelectContent className="rounded-lg border border-blue-100 bg-white/100 dark:bg-[#23263a] dark:border-blue-900 dark:text-white shadow-xl mt-1 transition-all duration-200">
                 <SelectItem value="mp4">
@@ -227,7 +241,7 @@ export const DownloaderForm = () => {
             </label>
             <Select value={quality} onValueChange={setQuality} disabled={isLoading}>
               <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 dark:bg-[#23263a] dark:border-blue-900 dark:text-white backdrop-blur-md hover:bg-blue-50 dark:hover:bg-[#2d314d] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 dark:focus:ring-blue-500 dark:focus:border-blue-500 transition-all duration-200 shadow text-base font-semibold">
-                <SelectValue />
+                <SelectValue placeholder="Select quality" />
               </SelectTrigger>
               <SelectContent className="rounded-lg border border-blue-100 bg-white/100 dark:bg-[#23263a] dark:border-blue-900 dark:text-white shadow-xl mt-1 transition-all duration-200">
                 <SelectItem value="1080p">
@@ -252,26 +266,28 @@ export const DownloaderForm = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">
               <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
-                Start Time
+                Start Time (HH:MM:SS)
               </label>
               <Input
                 type="text"
-                placeholder="e.g. 00:01:23"
+                placeholder="00:01:23"
                 value={start}
                 onChange={e => setStart(e.target.value)}
                 disabled={isLoading}
+                aria-label="Clip start time"
               />
             </div>
             <div className="space-y-3">
               <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
-                End Time
+                End Time (HH:MM:SS)
               </label>
               <Input
                 type="text"
-                placeholder="e.g. 00:02:34"
+                placeholder="00:02:34"
                 value={end}
                 onChange={e => setEnd(e.target.value)}
                 disabled={isLoading}
+                aria-label="Clip end time"
               />
             </div>
           </div>
@@ -279,16 +295,47 @@ export const DownloaderForm = () => {
         <Button
           type="submit"
           disabled={isLoading || !url.trim() || (tab === 'clip' && (!start.trim() || !end.trim()))}
-          className={`w-full h-16 text-lg font-bold ${downloadStatus === 'processing' ? 'bg-blue-500' : downloadStatus === 'success' ? 'bg-green-500' : downloadStatus === 'error' ? 'bg-red-500' : 'download-gradient'} hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
+          className={`w-full h-16 text-lg font-bold ${
+            downloadStatus === 'processing' 
+              ? 'bg-blue-500' 
+              : downloadStatus === 'success' 
+                ? 'bg-green-500' 
+                : downloadStatus === 'error' 
+                  ? 'bg-red-500' 
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+          } text-white hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
+          aria-busy={isLoading}
         >
           <div className="flex items-center space-x-3">
-            {downloadStatus === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> : downloadStatus === 'success' ? <CheckCircle className="w-5 h-5" /> : downloadStatus === 'error' ? <AlertCircle className="w-5 h-5" /> : <Download className="w-5 h-5" />}
-            <span>{downloadStatus === 'processing' ? (tab === 'clip' ? 'Clipping...' : 'Processing...') : downloadStatus === 'success' ? (tab === 'clip' ? 'Clipped!' : 'Downloaded!') : downloadStatus === 'error' ? 'Try Again' : (tab === 'clip' ? 'Clip Video' : 'Download Now')}</span>
+            {downloadStatus === 'processing' ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : downloadStatus === 'success' ? (
+              <CheckCircle className="w-5 h-5" />
+            ) : downloadStatus === 'error' ? (
+              <AlertCircle className="w-5 h-5" />
+            ) : (
+              <Download className="w-5 h-5" />
+            )}
+            <span>
+              {downloadStatus === 'processing' 
+                ? (tab === 'clip' ? 'Clipping...' : 'Processing...') 
+                : downloadStatus === 'success' 
+                  ? (tab === 'clip' ? 'Clipped!' : 'Downloaded!') 
+                  : downloadStatus === 'error' 
+                    ? 'Try Again' 
+                    : (tab === 'clip' ? 'Clip Video' : 'Download Now')
+              }
+            </span>
           </div>
         </Button>
         {downloadLink && (
           <div className="text-center space-y-2 animate-slide-in-up">
-            <a href={downloadLink} target="_blank" rel="noopener noreferrer" className="text-green-600 underline font-semibold">
+            <a 
+              href={downloadLink} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-green-600 underline font-semibold hover:text-green-700 transition-colors"
+            >
               Click here to download your file
             </a>
           </div>
