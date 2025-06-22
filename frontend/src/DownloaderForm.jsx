@@ -1,379 +1,300 @@
-// src/DownloaderForm.jsx
-import React, { useState } from "react";
-import {
-  Paper,
-  Box,
-  Stack,
-  TextField,
-  Button,
-  Alert,
-  Typography,
-  LinearProgress,
-  IconButton,
-  Tooltip,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Grid,
-} from "@mui/material";
-import { TimePicker } from "@mui/x-date-pickers";
-import { LocalizationProvider } from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import dayjs from "dayjs";
-import DownloadIcon from "@mui/icons-material/Download";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import CheckIcon from "@mui/icons-material/Check";
-import ErrorIcon from "@mui/icons-material/Error";
-import ContentCutIcon from "@mui/icons-material/ContentCut";
-import VideoFileIcon from "@mui/icons-material/VideoFile";
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Youtube, Download, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
-export default function DownloaderForm() {
-  const [videoUrl, setVideoUrl] = useState("");
-  const [mode, setMode] = useState("download"); // 'download' or 'clip'
-  const [startTime, setStartTime] = useState(dayjs().hour(0).minute(0).second(0));
-  const [endTime, setEndTime] = useState(dayjs().hour(0).minute(1).second(0));
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+export const DownloaderForm = () => {
+  const [tab, setTab] = useState('download'); // 'download' or 'clip'
+  const [url, setUrl] = useState('');
+  const [format, setFormat] = useState('mp4');
+  const [quality, setQuality] = useState('720p');
+  const [start, setStart] = useState(''); // for clip
+  const [end, setEnd] = useState('');     // for clip
+  const [isLoading, setIsLoading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState('idle');
+  const [downloadLink, setDownloadLink] = useState(null);
+  const { toast } = useToast();
 
-  const formatTimeForAPI = (timeValue) => {
-    if (!timeValue) return "00:00:00";
-    return timeValue.format("HH:mm:ss");
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setResult(null);
-    setError("");
-    setLoading(true);
-    setCopied(false);
-
-    let endpoint = "";
-    let body = {};
-
-    if (mode === "download") {
-      endpoint = "http://localhost:8000/api/download";
-      body = { video_url: videoUrl };
-    } else {
-      endpoint = "http://localhost:8000/api/clip";
-      body = {
-        video_url: videoUrl,
-        start_time: formatTimeForAPI(startTime),
-        end_time: formatTimeForAPI(endTime),
-      };
+  const handleDownload = async (e) => {
+    if (e) e.preventDefault();
+    if (!url.trim()) {
+      toast({
+        title: "Please enter a URL",
+        description: "You need to paste a YouTube URL to download.",
+        variant: "destructive",
+      });
+      return;
     }
-
+    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoading(true);
+    setDownloadStatus('processing');
+    setDownloadLink(null);
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      const response = await fetch('http://localhost:8000/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_url: url,
+          format,
+          quality,
+        }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || data.error || "Unknown error");
-      setResult(data);
-    } catch (err) {
-      setError(err.message);
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || "Unknown error");
+      }
+      setDownloadStatus('success');
+      setDownloadLink(`http://localhost:8000/api/download-file/${data.filename}`);
+      toast({
+        title: "Download Ready!",
+        description: (
+          <a href={`http://localhost:8000/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+            Click here to download: {data.title || data.filename}
+          </a>
+        ),
+      });
+      setTimeout(() => {
+        setDownloadStatus('idle');
+        setUrl('');
+      }, 3000);
+    } catch (error) {
+      setDownloadStatus('error');
+      toast({
+        title: "Download Failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-    setLoading(false);
   };
 
-  const handleCopy = () => {
-    if (result?.download_url) {
-      navigator.clipboard.writeText(result.download_url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const handleClip = async (e) => {
+    if (e) e.preventDefault();
+    if (!url.trim() || !start.trim() || !end.trim()) {
+      toast({
+        title: "Missing Fields",
+        description: "Please enter a YouTube URL, start time, and end time.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoading(true);
+    setDownloadStatus('processing');
+    setDownloadLink(null);
+    try {
+      const response = await fetch('http://localhost:8000/api/clip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_url: url,
+          start_time: start,
+          end_time: end,
+          format,
+          quality,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || "Unknown error");
+      }
+      setDownloadStatus('success');
+      setDownloadLink(`http://localhost:8000/api/download-file/${data.filename}`);
+      toast({
+        title: "Clip Ready!",
+        description: (
+          <a href={`http://localhost:8000/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+            Click here to download your clip
+          </a>
+        ),
+      });
+      setTimeout(() => {
+        setDownloadStatus('idle');
+        setUrl('');
+        setStart('');
+        setEnd('');
+      }, 3000);
+    } catch (error) {
+      setDownloadStatus('error');
+      toast({
+        title: "Clip Failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Paper
-        elevation={0}
-        sx={{
-          p: 4,
-          maxWidth: 600,
-          mx: "auto",
-          background: (theme) => theme.palette.background.paper,
-          borderRadius: 4,
-          boxShadow: (theme) =>
-            theme.palette.mode === "light"
-              ? "0 8px 24px rgba(74, 144, 226, 0.2)"
-              : "0 8px 24px rgba(216, 27, 96, 0.4)",
-        }}
-      >
-        <form onSubmit={handleSubmit}>
-          <Stack spacing={3}>
-            {/* URL Input */}
-            <Box>
-              <Typography
-                variant="body2"
-                sx={{
-                  mb: 1,
-                  color: "text.secondary",
-                  fontWeight: 600,
-                  letterSpacing: 0.5,
-                }}
-              >
-                Enter YouTube URL
-              </Typography>
-              <TextField
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="https://youtube.com/watch?v=..."
-                required
-                fullWidth
-                variant="outlined"
-                sx={{
-                  fontWeight: 600,
-                  fontSize: "1rem",
-                }}
+    <div className="glassmorphism border-white/20 shadow-2xl hover:shadow-3xl transition-all duration-500 group p-4">
+      {/* Tab Switcher */}
+      <div className="flex space-x-2 mb-4">
+        <button
+          className={`px-4 py-2 rounded-t-lg font-semibold transition-all duration-200 border-b-2 focus:outline-none shadow-sm
+            ${tab === 'download'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105'
+              : 'bg-white/70 dark:bg-gray-800 text-blue-700 dark:text-blue-200 border-transparent hover:bg-blue-100 dark:hover:bg-blue-900 hover:text-blue-900'}
+          `}
+          onClick={() => setTab('download')}
+          type="button"
+        >
+          Download Full Video
+        </button>
+        <button
+          className={`px-4 py-2 rounded-t-lg font-semibold transition-all duration-200 border-b-2 focus:outline-none shadow-sm
+            ${tab === 'clip'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105'
+              : 'bg-white/70 dark:bg-gray-800 text-blue-700 dark:text-blue-200 border-transparent hover:bg-blue-100 dark:hover:bg-blue-900 hover:text-blue-900'}
+          `}
+          onClick={() => setTab('clip')}
+          type="button"
+        >
+          Clip Video
+        </button>
+      </div>
+      <form onSubmit={tab === 'download' ? handleDownload : handleClip} className="space-y-4">
+        <div className="space-y-3">
+          <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+            YouTube URL
+          </label>
+          <div className="relative">
+            <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-red-500">
+              <Youtube className="w-5 h-5" />
+            </div>
+            <Input
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="pl-12 h-14 text-lg border-2 border-white/10 bg-white/5 backdrop-blur-sm focus:border-red-400 focus:bg-white/10 transition-all duration-300"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+              Format
+            </label>
+            <Select value={format} onValueChange={setFormat} disabled={isLoading}>
+              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 dark:bg-[#23263a] dark:border-blue-900 dark:text-white backdrop-blur-md hover:bg-blue-50 dark:hover:bg-[#2d314d] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 dark:focus:ring-blue-500 dark:focus:border-blue-500 transition-all duration-200 shadow text-base font-semibold">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 dark:bg-[#23263a] dark:border-blue-900 dark:text-white shadow-xl mt-1 transition-all duration-200">
+                <SelectItem value="mp4">
+                  <div className="flex items-center space-x-2">
+                    <span>MP4</span>
+                    <Badge variant="secondary" className="text-xs">Video</Badge>
+                  </div>
+                </SelectItem>
+                <SelectItem value="mp3">
+                  <div className="flex items-center space-x-2">
+                    <span>MP3</span>
+                    <Badge variant="secondary" className="text-xs">Audio</Badge>
+                  </div>
+                </SelectItem>
+                <SelectItem value="webm">
+                  <div className="flex items-center space-x-2">
+                    <span>WebM</span>
+                    <Badge variant="secondary" className="text-xs">Video</Badge>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+              Quality
+            </label>
+            <Select value={quality} onValueChange={setQuality} disabled={isLoading}>
+              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 dark:bg-[#23263a] dark:border-blue-900 dark:text-white backdrop-blur-md hover:bg-blue-50 dark:hover:bg-[#2d314d] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 dark:focus:ring-blue-500 dark:focus:border-blue-500 transition-all duration-200 shadow text-base font-semibold">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 dark:bg-[#23263a] dark:border-blue-900 dark:text-white shadow-xl mt-1 transition-all duration-200">
+                <SelectItem value="1080p">
+                  <div className="flex items-center space-x-2">
+                    <span>1080p</span>
+                    <Badge variant="default" className="text-xs bg-green-500">HD</Badge>
+                  </div>
+                </SelectItem>
+                <SelectItem value="720p">
+                  <div className="flex items-center space-x-2">
+                    <span>720p</span>
+                    <Badge variant="secondary" className="text-xs">Standard</Badge>
+                  </div>
+                </SelectItem>
+                <SelectItem value="480p">480p</SelectItem>
+                <SelectItem value="360p">360p</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {tab === 'clip' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+                Start Time
+              </label>
+              <Input
+                type="text"
+                placeholder="e.g. 00:01:23"
+                value={start}
+                onChange={e => setStart(e.target.value)}
+                disabled={isLoading}
               />
-            </Box>
-
-            {/* Mode Selection */}
-            <Box>
-              <FormControl component="fieldset">
-                <FormLabel
-                  component="legend"
-                  sx={{
-                    color: "text.secondary",
-                    fontWeight: 600,
-                    letterSpacing: 0.5,
-                    mb: 1,
-                  }}
-                >
-                  Download Mode
-                </FormLabel>
-                <RadioGroup
-                  row
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                  sx={{ gap: 2 }}
-                >
-                  <FormControlLabel
-                    value="download"
-                    control={<Radio />}
-                    label={
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <VideoFileIcon fontSize="small" />
-                        <Typography sx={{ fontWeight: 600 }}>Full Video</Typography>
-                      </Box>
-                    }
-                    sx={{
-                      border: mode === "download" ? "2px solid" : "2px solid transparent",
-                      borderColor: mode === "download" ? "primary.main" : "transparent",
-                      borderRadius: 2,
-                      px: 2,
-                      py: 1,
-                      m: 0,
-                      transition: "all 0.3s ease",
-                    }}
-                  />
-                  <FormControlLabel
-                    value="clip"
-                    control={<Radio />}
-                    label={
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <ContentCutIcon fontSize="small" />
-                        <Typography sx={{ fontWeight: 600 }}>Clip</Typography>
-                      </Box>
-                    }
-                    sx={{
-                      border: mode === "clip" ? "2px solid" : "2px solid transparent",
-                      borderColor: mode === "clip" ? "primary.main" : "transparent",
-                      borderRadius: 2,
-                      px: 2,
-                      py: 1,
-                      m: 0,
-                      transition: "all 0.3s ease",
-                    }}
-                  />
-                </RadioGroup>
-              </FormControl>
-            </Box>
-
-            {/* Clip Time Pickers */}
-            {mode === "clip" && (
-              <Box>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    mb: 2,
-                    color: "text.secondary",
-                    fontWeight: 600,
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  Clip Duration (HH:MM:SS)
-                </Typography>
-                <Grid container spacing={3}>
-                  <Grid item xs={6}>
-                    <TimePicker
-                      label="Start Time"
-                      value={startTime}
-                      onChange={(newValue) => setStartTime(newValue)}
-                      views={["hours", "minutes", "seconds"]}
-                      format="HH:mm:ss"
-                      ampm={false}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          variant: "outlined",
-                        },
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={6}>
-                    <TimePicker
-                      label="End Time"
-                      value={endTime}
-                      onChange={(newValue) => setEndTime(newValue)}
-                      views={["hours", "minutes", "seconds"]}
-                      format="HH:mm:ss"
-                      ampm={false}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          variant: "outlined",
-                        },
-                      }}
-                    />
-                  </Grid>
-                </Grid>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    mt: 1,
-                    color: "text.secondary",
-                    display: "block",
-                    textAlign: "center",
-                  }}
-                >
-                  Click on the time fields to open the time picker dials
-                </Typography>
-              </Box>
-            )}
-
-            {/* Download Button */}
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              startIcon={mode === "download" ? <DownloadIcon /> : <ContentCutIcon />}
-              disabled={loading}
-              sx={{
-                py: 1.5,
-                fontWeight: 700,
-                textTransform: "none",
-                borderRadius: 3,
-                fontSize: "1.1rem",
-              }}
-            >
-              {loading
-                ? "Processing..."
-                : mode === "download"
-                ? "Download Full Video"
-                : "Download Clip"}
-            </Button>
-
-            {/* Loading Progress */}
-            {loading && (
-              <Box>
-                <LinearProgress sx={{ borderRadius: 1 }} />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    mt: 1,
-                    color: "text.secondary",
-                    textAlign: "center",
-                    fontWeight: 500,
-                  }}
-                >
-                  {mode === "download" ? "Fetching video data..." : "Creating clip..."}
-                </Typography>
-              </Box>
-            )}
-          </Stack>
-        </form>
-
-        {/* Results */}
-        <Box sx={{ mt: 3 }}>
-          {/* Error */}
-          {error && (
-            <Alert
-              severity="error"
-              icon={<ErrorIcon />}
-              sx={{
-                borderRadius: 3,
-                fontWeight: 500,
-              }}
-            >
-              Error: {error}
-            </Alert>
-          )}
-
-          {/* Success */}
-          {result && (
-            <Alert
-              severity="success"
-              icon={<CheckIcon />}
-              sx={{
-                borderRadius: 3,
-                fontWeight: 500,
-              }}
-              action={
-                result.download_url && (
-                  <Tooltip title={copied ? "Copied!" : "Copy link"}>
-                    <IconButton
-                      color="inherit"
-                      size="small"
-                      onClick={handleCopy}
-                    >
-                      <ContentCopyIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )
-              }
-            >
-              <Typography variant="body1" sx={{ fontWeight: 700, mb: 1 }}>
-                Success! {mode === "download" ? "Video" : "Clip"} Ready
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                Title: {result.title || "Video"}
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.8, mb: 1 }}>
-                File: {result.filename}
-              </Typography>
-              {mode === "clip" && result.start_time && result.end_time && (
-                <Typography variant="body2" sx={{ opacity: 0.8, mb: 1 }}>
-                  Clipped: {result.start_time} - {result.end_time}
-                </Typography>
-              )}
-              {result.download_url && (
-                <Button
-                  href={result.download_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="outlined"
-                  size="small"
-                  startIcon={<DownloadIcon />}
-                  sx={{
-                    mt: 1,
-                    textTransform: "none",
-                    fontWeight: 600,
-                  }}
-                >
-                  Open Download
-                </Button>
-              )}
-            </Alert>
-          )}
-        </Box>
-      </Paper>
-    </LocalizationProvider>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+                End Time
+              </label>
+              <Input
+                type="text"
+                placeholder="e.g. 00:02:34"
+                value={end}
+                onChange={e => setEnd(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+        )}
+        <Button
+          type="submit"
+          disabled={isLoading || !url.trim() || (tab === 'clip' && (!start.trim() || !end.trim()))}
+          className={`w-full h-16 text-lg font-bold ${downloadStatus === 'processing' ? 'bg-blue-500' : downloadStatus === 'success' ? 'bg-green-500' : downloadStatus === 'error' ? 'bg-red-500' : 'download-gradient'} hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
+        >
+          <div className="flex items-center space-x-3">
+            {downloadStatus === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> : downloadStatus === 'success' ? <CheckCircle className="w-5 h-5" /> : downloadStatus === 'error' ? <AlertCircle className="w-5 h-5" /> : <Download className="w-5 h-5" />}
+            <span>{downloadStatus === 'processing' ? (tab === 'clip' ? 'Clipping...' : 'Processing...') : downloadStatus === 'success' ? (tab === 'clip' ? 'Clipped!' : 'Downloaded!') : downloadStatus === 'error' ? 'Try Again' : (tab === 'clip' ? 'Clip Video' : 'Download Now')}</span>
+          </div>
+        </Button>
+        {downloadLink && (
+          <div className="text-center space-y-2 animate-slide-in-up">
+            <a href={downloadLink} target="_blank" rel="noopener noreferrer" className="text-green-600 underline font-semibold">
+              Click here to download your file
+            </a>
+          </div>
+        )}
+      </form>
+    </div>
   );
-}
+};
