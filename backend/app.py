@@ -1,8 +1,6 @@
 import os
-import glob
-import time
 import subprocess
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -34,9 +32,13 @@ class ClipRequest(BaseModel):
     video_url: str
     start_time: str  # e.g. "00:01:00"
     end_time: str    # e.g. "00:02:00"
+    format: str = "mp4"
+    quality: str = "720p"
 
 @app.post("/api/download")
-async def download_video( DownloadRequest):  # ✅ Corrected parameter
+async def download_video( DownloadRequest, request: Request):
+    # Log the incoming request body for debugging
+    print(f"Incoming /api/download request: {await request.body()}")
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -46,8 +48,8 @@ async def download_video( DownloadRequest):  # ✅ Corrected parameter
         ydl_opts = {
             "format": "bestvideo+bestaudio/best",
             "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
-            "merge_output_format": "mp4",
-            "cookiefile": COOKIES_PATH,  # ADDED COOKIES
+            "merge_output_format": data.format,
+            "cookiefile": COOKIES_PATH,
         }
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
@@ -65,7 +67,9 @@ async def download_video( DownloadRequest):  # ✅ Corrected parameter
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest):  # ✅ Corrected parameter
+async def clip_video( ClipRequest, request: Request):
+    # Log the incoming request body for debugging
+    print(f"Incoming /api/clip request: {await request.body()}")
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
@@ -80,12 +84,12 @@ async def clip_video( ClipRequest):  # ✅ Corrected parameter
         ydl_opts = {
             "format": "bestvideo+bestaudio/best",
             "outtmpl": temp_filename,
-            "merge_output_format": "mp4",
+            "merge_output_format": data.format,
             "noplaylist": True,
             "socket_timeout": 30,
             "retries": 10,
             "fragment_retries": 20,
-            "cookiefile": COOKIES_PATH,  # ADDED COOKIES
+            "cookiefile": COOKIES_PATH,
         }
         print("yt-dlp options:", ydl_opts)
         with YoutubeDL(ydl_opts) as ydl:
