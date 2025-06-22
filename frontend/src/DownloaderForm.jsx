@@ -150,14 +150,22 @@ export const DownloaderForm = () => {
       {/* Tab Switcher */}
       <div className="flex space-x-2 mb-4">
         <button
-          className={`px-4 py-2 rounded-t-lg font-semibold ${tab === 'download' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
+          className={`px-4 py-2 rounded-t-lg font-semibold transition-all duration-200 border-b-2 focus:outline-none shadow-sm
+            ${tab === 'download'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105'
+              : 'bg-white/70 dark:bg-gray-800 text-blue-700 dark:text-blue-200 border-transparent hover:bg-blue-100 dark:hover:bg-blue-900 hover:text-blue-900'}
+          `}
           onClick={() => setTab('download')}
           type="button"
         >
           Download Full Video
         </button>
         <button
-          className={`px-4 py-2 rounded-t-lg font-semibold ${tab === 'clip' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
+          className={`px-4 py-2 rounded-t-lg font-semibold transition-all duration-200 border-b-2 focus:outline-none shadow-sm
+            ${tab === 'clip'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105'
+              : 'bg-white/70 dark:bg-gray-800 text-blue-700 dark:text-blue-200 border-transparent hover:bg-blue-100 dark:hover:bg-blue-900 hover:text-blue-900'}
+          `}
           onClick={() => setTab('clip')}
           type="button"
         >
