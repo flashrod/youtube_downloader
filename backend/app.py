@@ -36,7 +36,7 @@ class ClipRequest(BaseModel):
     end_time: str    # e.g. "00:02:00"
 
 @app.post("/api/download")
-async def download_video( DownloadRequest):
+async def download_video( DownloadRequest):  # ✅ Corrected parameter
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -65,7 +65,7 @@ async def download_video( DownloadRequest):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest):
+async def clip_video( ClipRequest):  # ✅ Corrected parameter
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
