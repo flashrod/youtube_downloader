@@ -197,10 +197,10 @@ export const DownloaderForm = () => {
               Format
             </label>
             <Select value={format} onValueChange={setFormat} disabled={isLoading}>
-              <SelectTrigger className="h-12 border-2 border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-all duration-300">
+              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 backdrop-blur-md hover:bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 shadow text-base font-semibold">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 shadow-xl mt-1">
                 <SelectItem value="mp4">
                   <div className="flex items-center space-x-2">
                     <span>MP4</span>
@@ -227,10 +227,10 @@ export const DownloaderForm = () => {
               Quality
             </label>
             <Select value={quality} onValueChange={setQuality} disabled={isLoading}>
-              <SelectTrigger className="h-12 border-2 border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-all duration-300">
+              <SelectTrigger className="h-12 rounded-lg border border-blue-200 bg-white/95 backdrop-blur-md hover:bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 shadow text-base font-semibold">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-lg border border-blue-100 bg-white/100 shadow-xl mt-1">
                 <SelectItem value="1080p">
                   <div className="flex items-center space-x-2">
                     <span>1080p</span>
