@@ -38,24 +38,42 @@ export const DownloaderForm = () => {
     setDownloadStatus('processing');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
+      // Call backend API
+      const response = await fetch('http://localhost:8000/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_url: url,
+          format,
+          quality,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || "Unknown error");
+      }
+
       setDownloadStatus('success');
       toast({
-        title: "Download Started!",
-        description: "Your video is being downloaded. Check your downloads folder.",
+        title: "Download Ready!",
+        description: (
+          <a href={`http://localhost:8000/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+            Click here to download: {data.title || data.filename}
+          </a>
+        ),
       });
-      
+
       setTimeout(() => {
         setDownloadStatus('idle');
         setUrl('');
       }, 3000);
-      
+
     } catch (error) {
       setDownloadStatus('error');
       toast({
         title: "Download Failed",
-        description: "Something went wrong. Please try again.",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
