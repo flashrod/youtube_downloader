@@ -41,7 +41,7 @@ export const DownloaderForm = () => {
     setDownloadStatus('processing');
     setDownloadLink(null);
     try {
-      const response = await fetch('http://localhost:8000/api/download', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -55,11 +55,11 @@ export const DownloaderForm = () => {
         throw new Error(data.detail || data.error || "Unknown error");
       }
       setDownloadStatus('success');
-      setDownloadLink(`http://localhost:8000/api/download-file/${data.filename}`);
+      setDownloadLink(`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`);
       toast({
         title: "Download Ready!",
         description: (
-          <a href={`http://localhost:8000/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+          <a href={`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
             Click here to download: {data.title || data.filename}
           </a>
         ),
@@ -102,8 +102,7 @@ export const DownloaderForm = () => {
     setDownloadStatus('processing');
     setDownloadLink(null);
     try {
-      const response = await fetch('http://localhost:8000/api/clip', {
-        method: 'POST',
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clip`, {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_url: url,
@@ -118,11 +117,11 @@ export const DownloaderForm = () => {
         throw new Error(data.detail || data.error || "Unknown error");
       }
       setDownloadStatus('success');
-      setDownloadLink(`http://localhost:8000/api/download-file/${data.filename}`);
+      setDownloadLink(`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`);
       toast({
         title: "Clip Ready!",
         description: (
-          <a href={`http://localhost:8000/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
+          <a href={`${import.meta.env.VITE_API_URL}/api/download-file/${data.filename}`} target="_blank" rel="noopener noreferrer">
             Click here to download your clip
           </a>
         ),

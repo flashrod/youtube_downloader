@@ -12,6 +12,9 @@ from yt_dlp import YoutubeDL
 DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
+# Path to cookies.txt (should be in same directory as this script)
+COOKIES_PATH = os.path.join(os.path.dirname(__file__), "cookies.txt")
+
 app = FastAPI()
 
 app.add_middleware(
@@ -31,7 +34,7 @@ class ClipRequest(BaseModel):
     end_time: str    # e.g. "00:02:00"
 
 @app.post("/api/download")
-async def download_video(data: DownloadRequest):
+async def download_video( DownloadRequest):
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -42,6 +45,7 @@ async def download_video(data: DownloadRequest):
             "format": "bestvideo+bestaudio/best",
             "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
             "merge_output_format": "mp4",
+            "cookiefile": COOKIES_PATH,  # ADDED COOKIES
         }
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
@@ -59,7 +63,7 @@ async def download_video(data: DownloadRequest):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video(data: ClipRequest):
+async def clip_video( ClipRequest):
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
@@ -79,6 +83,7 @@ async def clip_video(data: ClipRequest):
             "socket_timeout": 30,
             "retries": 10,
             "fragment_retries": 20,
+            "cookiefile": COOKIES_PATH,  # ADDED COOKIES
         }
         print("yt-dlp options:", ydl_opts)
         with YoutubeDL(ydl_opts) as ydl:
