@@ -1,64 +1,129 @@
-Sure! Here’s the full README.md in Markdown format:
+# YouTube Downloader 🎬
 
-# YouTube Downloader 🎥⬇️
+A modern, full-stack YouTube downloader web app. Download full videos or audio, or clip segments, with a beautiful React + Vite frontend and a FastAPI backend powered by `yt-dlp`.
 
-A simple Python-based CLI tool to download YouTube videos or extract audio using the `pytube` library.
+---
 
 ## Features
 
-- Download videos in multiple resolutions (e.g., 720p, 1080p)
-- Extract audio in MP4 format
-- User-friendly command-line prompts
-- Lightweight and easy to use
+- 🎥 Download YouTube videos in multiple formats (MP4, MP3, WebM)
+- 🎵 Extract audio only
+- ✂️ Clip specific segments by start/end time
+- 📺 Choose video quality (1080p, 720p, 480p, 360p)
+- ⚡ Fast, responsive UI with dark mode support
+- 🪄 Modern design with Tailwind CSS and Radix UI
+- 🔒 Safe download links, no ads
 
-## Requirements
+---
 
-- Python 3.7+
-- `pytube`
+## Tech Stack
 
-## Installation
+- **Frontend:** React 19, Vite, Tailwind CSS, Radix UI, Lucide Icons
+- **Backend:** FastAPI, yt-dlp, Uvicorn, Python 3.8+
+- **Other:** CORS, REST API, Docker-ready (optional)
 
-1. Clone the repository:
+---
+
+## Getting Started
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/flashrod/youtube_downloader.git
 cd youtube_downloader
+```
 
-	2.	Install dependencies:
+### 2. Backend Setup
 
-pip install pytube
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --reload
+```
 
-Usage
+- The backend will run at `http://localhost:8000`
 
-Run the script using Python:
+### 3. Frontend Setup
 
-python downloader.py
+```bash
+cd ../frontend
+npm install
+npm run dev
+```
 
-Then follow the prompts to:
-	•	Enter the YouTube video URL
-	•	Choose whether to download the full video or audio only
-	•	Select the desired resolution (for video)
+- The frontend will run at `http://localhost:5173`
 
-Example
+---
 
-Enter the YouTube URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-Choose download type:
-1. Video
-2. Audio
-> 1
-Select resolution:
-1. 360p
-2. 720p
-3. 1080p
-> 2
-Downloading...
-Done!
+## Usage
 
-Notes
-	•	Downloaded files are saved in the same directory as the script.
-	•	Some high-resolution videos may not be available depending on the source.
-	•	Make sure the video is public and not age-restricted.
+1. Open the frontend in your browser.
+2. Paste a YouTube URL.
+3. Choose format (MP4, MP3, WebM) and quality.
+4. (Optional) Switch to "Clip Video" to select start/end times.
+5. Click **Download** or **Clip Video**.
+6. When ready, click the download link to save your file.
 
-License
+---
 
-This project is licensed under the MIT License.
+## API Endpoints
+
+- `POST /api/download` — Download full video/audio
+- `POST /api/clip` — Download a specific segment
+- `GET /api/download-file/{filename}` — Download the processed file
+
+---
+
+## Project Structure
+
+```
+youtube_downloader/
+├── backend/
+│   ├── app.py
+│   ├── requirements.txt
+│   └── downloads/
+├── frontend/
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── ...
+├── db.sqlite3
+└── README.md
+```
+
+---
+
+## Customization
+
+- **Dark Mode:** Fully supported, auto-detects system theme.
+- **Quality/Format:** Easily extendable in the frontend.
+- **Backend:** Uses `yt-dlp` for best compatibility.
+
+---
+
+## Troubleshooting
+
+- Make sure both backend and frontend are running.
+- If you get CORS errors, check backend terminal for logs.
+- For high-res downloads, some videos may not be available due to YouTube restrictions.
+
+---
+
+## License
+
+MIT
+
+---
+
+## Credits
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [Vite](https://vitejs.dev/)
+- [Tailwind CSS](https://tailwindcss.com/)
+
+---
+
+Feel free to copy this into your `README.md`. Let me know if you want to add Docker instructions or deployment info!
