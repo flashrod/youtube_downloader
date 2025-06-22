@@ -1,6 +1,6 @@
 import os
 import subprocess
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from yt_dlp import YoutubeDL
 DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-# Path to cookies.txt
+# Path to cookies.txt (should be in same directory as this script)
 COOKIES_PATH = os.path.join(os.path.dirname(__file__), "cookies.txt")
 
 app = FastAPI()
@@ -35,9 +35,8 @@ class ClipRequest(BaseModel):
     format: str = 'mp4'
     quality: str = '720p'
 
-
 @app.post("/api/download")
-async def download_video( DownloadRequest):  # <<< THIS IS THE FIX
+async def download_video( DownloadRequest = Body(...)):
     video_url = data.video_url.strip()
     if not video_url:
         raise HTTPException(status_code=400, detail="Please provide a YouTube URL.")
@@ -66,7 +65,7 @@ async def download_video( DownloadRequest):  # <<< THIS IS THE FIX
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.post("/api/clip")
-async def clip_video( ClipRequest):      # <<< AND THIS IS THE FIX
+async def clip_video( ClipRequest = Body(...)):
     video_url = data.video_url.strip()
     start_time = data.start_time.strip()
     end_time = data.end_time.strip()
