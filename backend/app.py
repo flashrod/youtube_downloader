@@ -4,20 +4,20 @@ import random
 import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 from typing import Optional
+import sys
 import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Force Python 3.10 compatibility
-import sys
+# Optional version warning (do NOT raise error)
 if sys.version_info >= (3, 11):
-    raise RuntimeError("Python 3.10 required! Change your Render environment.")
+    logger.warning("⚠️ Your Python version may not be fully compatible with FastAPI + Pydantic 1.x")
 
 app = FastAPI()
 
@@ -72,6 +72,7 @@ async def download_video(request: DownloadRequest):
     }
 
     try:
+        os.makedirs("downloads", exist_ok=True)
         filename, info = download_video_ytdlp(request.url, ydl_opts)
         return {
             "status": "success",
