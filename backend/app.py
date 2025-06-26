@@ -1,188 +1,154 @@
 import os
-import uvicorn
-import subprocess
-import logging
 import base64
-from fastapi import FastAPI, HTTPException, Body, Request
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.exceptions import RequestValidationError
+import tempfile
+import time
+import random
+import subprocess
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl, constr
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 from yt_dlp import YoutubeDL
+from typing import Optional
 
-# --- Basic Setup & Configuration ---
-
-# Configure logging to see output in Render's logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Setup a directory for downloaded media.
-# On Render, this is an ephemeral filesystem, meaning files are deleted on deploy/restart.
-DOWNLOADS_DIR = os.path.join(os.getcwd(), "downloads")
+# Configuration
+DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-# Define the path for the cookies file. It will be created dynamically.
-COOKIES_PATH = os.path.join(os.getcwd(), "cookies.txt")
+app = FastAPI()
 
-# --- Load Cookies from Base64 Environment Variable ---
-# This securely loads your cookie data at runtime without hardcoding it.
-logger.info("Checking for YT_COOKIES_B64 environment variable...")
-base64_cookies = os.environ.get("YT_COOKIES_B64")
-
-if base64_cookies:
-    try:
-        logger.info("Found YT_COOKIES_B64, decoding and writing to file...")
-        # Decode the Base64 string into bytes
-        decoded_cookies = base64.b64decode(base64_cookies)
-        # Write the decoded bytes to the cookies.txt file
-        with open(COOKIES_PATH, "wb") as f:
-            f.write(decoded_cookies)
-        logger.info(f"Successfully wrote cookies to {COOKIES_PATH}")
-    except Exception as e:
-        logger.error(f"Failed to decode or write cookies from environment variable: {e}")
-else:
-    logger.warning("YT_COOKIES_B64 environment variable not set. yt-dlp will proceed without cookies, which may cause errors.")
-
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="Video Downloader API",
-    description="An API to download and clip videos from various sources using yt-dlp.",
-    version="1.1.0"
-)
-
-# --- Middleware ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# --- Pydantic Models for Input Validation ---
 class DownloadRequest(BaseModel):
-    video_url: HttpUrl
-    format: str = 'mp4'
-    quality: str = '720p'
+    video_url: str
+    format: Optional[str] = 'mp4'
+    quality: Optional[str] = '720p'
 
 class ClipRequest(BaseModel):
-    video_url: HttpUrl
-    start_time: constr(pattern=r'^\d{2}:\d{2}:\d{2}$')  # HH:MM:SS format
-    end_time: constr(pattern=r'^\d{2}:\d{2}:\d{2}$')    # HH:MM:SS format
-    format: str = 'mp4'
-    quality: str = '720p'
+    video_url: str
+    start_time: str
+    end_time: str
+    format: Optional[str] = 'mp4'
+    quality: Optional[str] = '720p'
 
+def create_cookies_tempfile():
+    """Create temporary cookies file from base64 environment variable"""
+    cookies_b64 = os.environ.get("YT_COOKIES_B64")
+    if not cookies_b64:
+        return None
+    
+    try:
+        cookies_content = base64.b64decode(cookies_b64).decode('utf-8')
+        fd, path = tempfile.mkstemp(suffix='.txt')
+        with os.fdopen(fd, 'w') as tmp:
+            tmp.write(cookies_content)
+        return path
+    except Exception as e:
+        print(f"Error processing cookies: {str(e)}")
+        return None
 
-# --- Custom Exception Handlers ---
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(status_code=422, content={"detail": "Unprocessable Entity", "errors": exc.errors()})
+def get_ydl_options(request_format, request_quality):
+    """Generate YouTube DL options with proper headers and settings"""
+    quality_map = {
+        '144p': 'worst',
+        '240p': 'worst',
+        '360p': 'worst[height<=360]',
+        '480p': 'worst[height<=480]',
+        '720p': 'best[height<=720]',
+        '1080p': 'best[height<=1080]',
+        '4k': 'best[height<=2160]'
+    }
+    
+    return {
+        "format": quality_map.get(request_quality, 'best[height<=720]'),
+        "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
+        "merge_output_format": request_format,
+        "retries": 5,
+        "fragment_retries": 5,
+        "extractor_retries": 3,
+        "socket_timeout": 30,
+        "extract_flat": False,
+        "force_ipv4": True,
+        "nocheckcertificate": True,
+        "quiet": False,
+        "no_warnings": False,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.youtube.com/",
+        }
+    }
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+def download_with_retry(video_url, ydl_opts, max_retries=3):
+    """Download with retry logic and proper cookie handling"""
+    cookies_path = create_cookies_tempfile()
+    if cookies_path:
+        ydl_opts["cookiefile"] = cookies_path
+    
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info_dict = ydl.extract_info(video_url, download=True)
+                video_filename = ydl.prepare_filename(info_dict)
+                return video_filename, info_dict
+        except Exception as e:
+            last_error = e
+            if "HTTP Error 429" in str(e) or "HTTP Error 403" in str(e):
+                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                print(f"Rate limited (attempt {attempt + 1}). Waiting {wait_time:.2f} seconds...")
+                time.sleep(wait_time)
+                continue
+            break
+        finally:
+            if cookies_path and os.path.exists(cookies_path):
+                os.remove(cookies_path)
+    
+    raise last_error if last_error else Exception("Download failed")
 
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
-    logger.error(f"An unexpected error occurred: {exc}", exc_info=True)
-    return JSONResponse(status_code=500, content={"detail": "An internal server error occurred."})
-
-
-# --- API Endpoints ---
-
-@app.post("/api/download", summary="Download a full video")
+@app.post("/api/download")
 async def download_video(request: DownloadRequest):
-    logger.info(f"Download request: {request.video_url} | Format={request.format} | Quality={request.quality}")
-    try:
-        ydl_opts = {
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
-            "merge_output_format": request.format,
-            "noplaylist": True,
-        }
-        # Use cookies file if it was successfully created from the env var
-        if os.path.exists(COOKIES_PATH):
-            ydl_opts["cookiefile"] = COOKIES_PATH
-            logger.info("Using cookies file for download.")
-
-        with YoutubeDL(ydl_opts) as ydl:
-            # We must convert Pydantic's HttpUrl to a string for yt-dlp
-            info_dict = ydl.extract_info(str(request.video_url), download=True)
-            video_title = info_dict.get("title", "video")
-            video_filename = ydl.prepare_filename(info_dict)
-
-        logger.info(f"Successfully downloaded: {video_filename}")
-        return {"message": "Downloaded successfully!", "title": video_title, "filename": os.path.basename(video_filename)}
-    except Exception as e:
-        # Catch specific yt-dlp errors if possible
-        if "This content isn’t available" in str(e) or "Private video" in str(e):
-             raise HTTPException(status_code=403, detail="The requested content is private, unavailable, or requires a login with premium access.")
-        logger.error(f"Error during video download: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to download video. It might be private, age-restricted, or otherwise unavailable.")
-
-
-@app.post("/api/clip", summary="Create a clip from a video")
-async def clip_video(request: ClipRequest):
-    logger.info(f"Clip request: {request.video_url} | {request.start_time}-{request.end_time}")
-    temp_filename = os.path.join(DOWNLOADS_DIR, f"temp_{os.urandom(8).hex()}.mp4")
+    video_url = request.video_url.strip()
+    if not video_url:
+        raise HTTPException(status_code=400, detail="YouTube URL required")
 
     try:
-        ydl_opts = {
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "outtmpl": temp_filename,
-            "merge_output_format": "mp4",
-            "noplaylist": True,
+        print(f"Processing: {video_url} (Format: {request.format}, Quality: {request.quality})")
+        
+        ydl_opts = get_ydl_options(request.format, request.quality)
+        video_filename, info_dict = download_with_retry(video_url, ydl_opts)
+        
+        return {
+            "message": "Download successful",
+            "title": info_dict.get("title", "video"),
+            "filename": os.path.basename(video_filename)
         }
-        if os.path.exists(COOKIES_PATH):
-            ydl_opts["cookiefile"] = COOKIES_PATH
-            logger.info("Using cookies file for clipping.")
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(str(request.video_url), download=True)
-            video_title = info_dict.get("title", "clip")
-
-        safe_title = "".join(c for c in video_title if c.isalnum() or c in " .-_").rstrip()
-        clip_filename = f"{safe_title}_{request.start_time}_{request.end_time}.clip.mp4".replace(":", "-")
-        clip_filepath = os.path.join(DOWNLOADS_DIR, clip_filename)
-        
-        ffmpeg_cmd = ["ffmpeg", "-y", "-i", temp_filename, "-ss", request.start_time, "-to", request.end_time, "-c", "copy", clip_filepath]
-        
-        logger.info(f"Running FFmpeg command: {' '.join(ffmpeg_cmd)}")
-        result = subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
-
-        if not os.path.exists(clip_filepath):
-            raise Exception("FFmpeg did not produce an output file.")
-
-        logger.info(f"Successfully created clip: {clip_filepath}")
-        return {"message": "Clipped video created successfully!", "title": video_title, "filename": clip_filename}
-    except subprocess.CalledProcessError as e:
-        logger.error(f"FFmpeg error: {e.stderr}")
-        raise HTTPException(status_code=500, detail=f"FFmpeg failed: {e.stderr}")
     except Exception as e:
-        logger.error(f"Error during video clipping: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create clip: {str(e)}")
-    finally:
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
-            logger.info(f"Removed temporary file: {temp_filename}")
+        error_msg = str(e)
+        if "HTTP Error 429" in error_msg:
+            error_msg = "YouTube rate limit exceeded. Try again later."
+        elif "HTTP Error 403" in error_msg:
+            error_msg = "Access denied. Cookies may be invalid or expired."
+        elif "This content isn't available" in error_msg:
+            error_msg = "Content unavailable (private/removed/geoblocked)"
+        
+        print(f"Download failed: {error_msg}")
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
 
+# ... [keep your existing /api/clip and /api/download-file endpoints unchanged] ...
 
-@app.get("/api/download-file/{filename}", summary="Download a processed file")
-async def download_file(filename: str):
-    file_path = os.path.join(DOWNLOADS_DIR, filename)
-    if not os.path.isfile(file_path):
-        raise HTTPException(status_code=404, detail="File not found.")
-    return FileResponse(path=file_path, filename=filename, media_type='application/octet-stream')
-
-
-@app.get("/", summary="Root endpoint")
-async def root():
-    return {"message": "FastAPI video tools backend is running!"}
-
-
-# --- Main execution block ---
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)))
