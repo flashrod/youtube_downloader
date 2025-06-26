@@ -2,26 +2,28 @@ import os
 import time
 import random
 import logging
+import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 from typing import Optional
-import sys
-import uuid
 
-# Configure logging
+# ✅ Enforce Python 3.10 compatibility
+if sys.version_info >= (3, 11):
+    raise RuntimeError("Python 3.10 required! Set PYTHON_VERSION=3.10.13 in Render.")
+
+# ✅ Create downloads folder if not exists
+os.makedirs("downloads", exist_ok=True)
+
+# ✅ Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Optional version warning (do NOT raise error)
-if sys.version_info >= (3, 11):
-    logger.warning("⚠️ Your Python version may not be fully compatible with FastAPI + Pydantic 1.x")
-
 app = FastAPI()
 
-# CORS
+# ✅ Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,11 +31,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ✅ Request model
 class DownloadRequest(BaseModel):
     url: str
     format: Optional[str] = "mp4"
     quality: Optional[str] = "720p"
 
+# ✅ Helper function to download with retry
 def download_video_ytdlp(url: str, ydl_opts: dict):
     for attempt in range(3):
         try:
@@ -47,10 +51,12 @@ def download_video_ytdlp(url: str, ydl_opts: dict):
             logger.warning(f"Attempt {attempt+1} failed. Retrying in {wait:.1f}s...")
             time.sleep(wait)
 
+# ✅ Health check
 @app.get("/")
 async def health_check():
     return {"status": "OK", "python_version": sys.version}
 
+# ✅ Video download endpoint
 @app.post("/download")
 async def download_video(request: DownloadRequest):
     if not request.url.strip():
@@ -72,18 +78,18 @@ async def download_video(request: DownloadRequest):
     }
 
     try:
-        os.makedirs("downloads", exist_ok=True)
         filename, info = download_video_ytdlp(request.url, ydl_opts)
         return {
             "status": "success",
             "filename": os.path.basename(filename),
-            "title": info.get('title', 'video')
+            "title": info.get("title", "video")
         }
     except Exception as e:
         error_msg = "Rate limited" if "429" in str(e) else "Download failed"
         logger.error(f"{error_msg}: {str(e)}")
         raise HTTPException(500, detail=error_msg)
 
+# ✅ Serve downloaded files
 @app.get("/download/{filename}")
 async def serve_file(filename: str):
     filepath = os.path.join("downloads", filename)
@@ -91,6 +97,7 @@ async def serve_file(filename: str):
         raise HTTPException(404, detail="File not found")
     return FileResponse(filepath)
 
+# ✅ Only for local dev (not needed on Render)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
