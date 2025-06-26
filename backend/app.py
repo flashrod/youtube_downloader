@@ -14,92 +14,77 @@ import uuid
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Force Python 3.10 compatibility
+import sys
+if sys.version_info >= (3, 11):
+    raise RuntimeError("Python 3.10 required! Change your Render environment.")
+
 app = FastAPI()
 
-# CORS Configuration
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Models
 class DownloadRequest(BaseModel):
     url: str
     format: Optional[str] = "mp4"
     quality: Optional[str] = "720p"
 
-# Helper Functions
-def get_ydl_opts(request: DownloadRequest):
-    """Generate optimized YouTube DL configuration"""
-    return {
-        'format': f'bestvideo[height<={request.quality[:-1]}]+bestaudio/best',
-        'merge_output_format': request.format,
-        'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'retries': 10,
-        'fragment_retries': 10,
-        'extractor_retries': 3,
-        'socket_timeout': 30,
-        'extract_flat': False,
-        'force_ipv4': True,
-        'nocheckcertificate': True,
-        'quiet': True,
-        'no_warnings': False,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        },
-        'throttledratelimit': 1000000,
-    }
+def download_video_ytdlp(url: str, ydl_opts: dict):
+    for attempt in range(3):
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                return ydl.prepare_filename(info), info
+        except Exception as e:
+            if attempt == 2:
+                raise
+            wait = (2 ** attempt) + random.uniform(0, 1)
+            logger.warning(f"Attempt {attempt+1} failed. Retrying in {wait:.1f}s...")
+            time.sleep(wait)
 
-# Endpoints
 @app.get("/")
-async def root():
-    return {"status": "active", "service": "YouTube Downloader"}
+async def health_check():
+    return {"status": "OK", "python_version": sys.version}
 
 @app.post("/download")
 async def download_video(request: DownloadRequest):
-    """Robust download endpoint with retry logic"""
     if not request.url.strip():
-        raise HTTPException(400, detail="URL cannot be empty")
+        raise HTTPException(400, detail="URL required")
 
-    ydl_opts = get_ydl_opts(request)
-    download_id = str(uuid.uuid4())
-    ydl_opts['outtmpl'] = f'downloads/{download_id}.%(ext)s'
+    ydl_opts = {
+        'format': f'bestvideo[height<={request.quality[:-1]}]+bestaudio/best',
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'retries': 5,
+        'fragment_retries': 5,
+        'extractor_retries': 3,
+        'socket_timeout': 30,
+        'nocheckcertificate': True,
+        'quiet': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+    }
 
     try:
-        for attempt in range(3):  # Max 3 attempts
-            try:
-                with YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(request.url, download=True)
-                    filename = f"{download_id}.{request.format}"
-                    return {
-                        "status": "success",
-                        "filename": filename,
-                        "title": info.get('title'),
-                        "duration": info.get('duration')
-                    }
-            except Exception as e:
-                if attempt == 2:  # Final attempt
-                    raise
-                wait_time = (2 ** attempt) + random.random()
-                logger.warning(f"Attempt {attempt+1} failed, retrying in {wait_time:.1f}s")
-                time.sleep(wait_time)
-
+        filename, info = download_video_ytdlp(request.url, ydl_opts)
+        return {
+            "status": "success",
+            "filename": os.path.basename(filename),
+            "title": info.get('title', 'video')
+        }
     except Exception as e:
-        error_msg = str(e)
-        if "HTTP Error 429" in error_msg:
-            error_msg = "YouTube rate limit exceeded - try again later"
-        elif "unavailable" in error_msg:
-            error_msg = "Video unavailable (may be private or removed)"
-        logger.error(f"Download failed: {error_msg}")
+        error_msg = "Rate limited" if "429" in str(e) else "Download failed"
+        logger.error(f"{error_msg}: {str(e)}")
         raise HTTPException(500, detail=error_msg)
 
 @app.get("/download/{filename}")
 async def serve_file(filename: str):
-    """Serve downloaded files"""
     filepath = os.path.join("downloads", filename)
     if not os.path.exists(filepath):
         raise HTTPException(404, detail="File not found")
@@ -107,4 +92,4 @@ async def serve_file(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    uvicorn.run(app, host="0.0.0.0", port=8000)
