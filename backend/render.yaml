@@ -1,12 +1,6 @@
 services:
   - type: web
     name: youtube-downloader
-    runtime: python
-    pythonVersion: "3.10"  # ← THIS IS CRITICAL
-    buildCommand: |
-      pip install -r requirements.txt
-      mkdir -p downloads
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    env:
-      - key: PORT
-        value: 10000
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn --workers 4 app:app"
