@@ -1,24 +1,13 @@
 services:
-  # A web service for our FastAPI application
   - type: web
-    name: video-tools-api
-    # Use 'python3' for python environment on Render
+    name: youtube-downloader
     runtime: python
-    plan: free # 'starter' is also a good option for more memory
-    # Command to install dependencies from requirements.txt
-    buildCommand: "pip install -r requirements.txt"
-    # Command to start the application using Gunicorn (production server)
-    startCommand: "gunicorn -w 4 -k uvicorn.workers.UvicornWorker app:app"
-    # Health check to ensure the service is running before marking it as "healthy"
-    healthCheckPath: /
-    
-    # Environment variables section
-    # You will add your cookie secret in the Render Dashboard, not here.
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.4
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 2
+    env:
+      - key: PORT
+        value: 10000
       - key: YT_COOKIES_B64
-        # This key MUST match the one used in app.py.
-        # You will set its value in the Render.com dashboard.
-        # It is recommended to use 'sync: false' if you manage it only via the dashboard
-        sync: false
+        value: your_base64_encoded_cookies_here
+      - key: PYTHONUNBUFFERED
+        value: 1

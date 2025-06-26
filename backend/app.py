@@ -3,20 +3,27 @@ import base64
 import tempfile
 import time
 import random
-import subprocess
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 from typing import Optional
+import traceback
 
 # Configuration
-DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "downloads")
-os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+app = FastAPI(
+    title="YouTube Downloader API",
+    description="Production-ready YouTube downloader with cookie authentication",
+    version="1.0.0",
+)
 
-app = FastAPI()
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,130 +32,153 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Models
 class DownloadRequest(BaseModel):
     video_url: str
     format: Optional[str] = 'mp4'
     quality: Optional[str] = '720p'
 
-class ClipRequest(BaseModel):
-    video_url: str
-    start_time: str
-    end_time: str
-    format: Optional[str] = 'mp4'
-    quality: Optional[str] = '720p'
+# Helper Functions
+def validate_cookies(cookies_content: str) -> bool:
+    """Validate that cookies contain required YouTube fields"""
+    required_markers = ["youtube.com", "LOGIN_INFO", "VISITOR_INFO"]
+    return all(marker in cookies_content for marker in required_markers)
 
-def create_cookies_tempfile():
-    """Create temporary cookies file from base64 environment variable"""
-    cookies_b64 = os.environ.get("YT_COOKIES_B64")
+def create_temp_cookies() -> Optional[str]:
+    """Create temporary cookies file from base64 env var"""
+    cookies_b64 = os.getenv("YT_COOKIES_B64")
     if not cookies_b64:
+        logger.warning("No cookies provided in YT_COOKIES_B64")
         return None
-    
+
     try:
         cookies_content = base64.b64decode(cookies_b64).decode('utf-8')
+        if not validate_cookies(cookies_content):
+            logger.error("Invalid cookies - missing required fields")
+            return None
+            
         fd, path = tempfile.mkstemp(suffix='.txt')
         with os.fdopen(fd, 'w') as tmp:
             tmp.write(cookies_content)
         return path
     except Exception as e:
-        print(f"Error processing cookies: {str(e)}")
+        logger.error(f"Cookie processing failed: {str(e)}")
         return None
 
-def get_ydl_options(request_format, request_quality):
-    """Generate YouTube DL options with proper headers and settings"""
+def get_ydl_config(quality: str, format: str) -> dict:
+    """Return optimized YouTube DL configuration"""
     quality_map = {
         '144p': 'worst',
-        '240p': 'worst',
-        '360p': 'worst[height<=360]',
-        '480p': 'worst[height<=480]',
-        '720p': 'best[height<=720]',
-        '1080p': 'best[height<=1080]',
-        '4k': 'best[height<=2160]'
+        '240p': 'worst[height>=144][height<=240]',
+        '360p': 'worst[height>=240][height<=360]',
+        '480p': 'worst[height>=360][height<=480]',
+        '720p': 'best[height>=480][height<=720]',
+        '1080p': 'best[height>=720][height<=1080]',
+        '4k': 'best[height>=1080]'
     }
     
     return {
-        "format": quality_map.get(request_quality, 'best[height<=720]'),
-        "outtmpl": os.path.join(DOWNLOADS_DIR, "%(title)s.%(ext)s"),
-        "merge_output_format": request_format,
-        "retries": 5,
-        "fragment_retries": 5,
-        "extractor_retries": 3,
-        "socket_timeout": 30,
-        "extract_flat": False,
-        "force_ipv4": True,
-        "nocheckcertificate": True,
-        "quiet": False,
-        "no_warnings": False,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.youtube.com/",
+        'format': quality_map.get(quality, 'best[height<=720]'),
+        'merge_output_format': format,
+        'outtmpl': '%(title)s.%(ext)s',
+        'retries': 10,
+        'fragment_retries': 10,
+        'extractor_retries': 5,
+        'socket_timeout': 60,
+        'extract_flat': False,
+        'force_ipv4': True,
+        'nocheckcertificate': True,
+        'quiet': True,
+        'no_warnings': False,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.youtube.com/',
+        },
+        'cookiefile': create_temp_cookies(),
+    }
+
+# Endpoints
+@app.get("/")
+async def root():
+    return {
+        "status": "active",
+        "service": "YouTube Downloader",
+        "endpoints": {
+            "/download": "POST - Download videos",
+            "/health": "GET - Service health check"
         }
     }
 
-def download_with_retry(video_url, ydl_opts, max_retries=3):
-    """Download with retry logic and proper cookie handling"""
-    cookies_path = create_cookies_tempfile()
-    if cookies_path:
-        ydl_opts["cookiefile"] = cookies_path
-    
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+@app.post("/download")
+async def download_video(request: DownloadRequest):
+    """Robust download endpoint with exponential backoff"""
+    if not request.video_url.strip():
+        raise HTTPException(400, "YouTube URL required")
+
+    ydl_opts = get_ydl_config(request.quality, request.format)
     last_error = None
-    for attempt in range(max_retries):
+
+    for attempt in range(3):  # Max 3 attempts
         try:
             with YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(video_url, download=True)
-                video_filename = ydl.prepare_filename(info_dict)
-                return video_filename, info_dict
+                info = ydl.extract_info(request.video_url, download=True)
+                filename = ydl.prepare_filename(info)
+                
+                return {
+                    "status": "success",
+                    "filename": os.path.basename(filename),
+                    "title": info.get('title'),
+                    "duration": info.get('duration'),
+                    "available_formats": list(info.get('formats', []))
+                }
+
         except Exception as e:
             last_error = e
-            if "HTTP Error 429" in str(e) or "HTTP Error 403" in str(e):
-                wait_time = (2 ** attempt) + random.uniform(0, 1)
-                print(f"Rate limited (attempt {attempt + 1}). Waiting {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
-                continue
+            if attempt == 2:  # Final attempt
+                break
+
+            # Exponential backoff with jitter
+            wait_time = (2 ** attempt) + random.random()
+            logger.warning(f"Attempt {attempt+1} failed. Retrying in {wait_time:.1f}s")
+            time.sleep(wait_time)
+
+    # Handle final error
+    error_map = {
+        429: "YouTube rate limit exceeded - try again later",
+        403: "Access denied - check your cookies",
+        404: "Video not found or unavailable",
+    }
+
+    error_detail = str(last_error)
+    status_code = 500
+    for code, message in error_map.items():
+        if str(code) in error_detail:
+            status_code = code
+            error_detail = message
             break
-        finally:
-            if cookies_path and os.path.exists(cookies_path):
-                os.remove(cookies_path)
-    
-    raise last_error if last_error else Exception("Download failed")
 
-@app.post("/api/download")
-async def download_video(request: DownloadRequest):
-    video_url = request.video_url.strip()
-    if not video_url:
-        raise HTTPException(status_code=400, detail="YouTube URL required")
+    logger.error(f"Download failed: {error_detail}")
+    raise HTTPException(status_code, detail=error_detail)
 
-    try:
-        print(f"Processing: {video_url} (Format: {request.format}, Quality: {request.quality})")
-        
-        ydl_opts = get_ydl_options(request.format, request.quality)
-        video_filename, info_dict = download_with_retry(video_url, ydl_opts)
-        
-        return {
-            "message": "Download successful",
-            "title": info_dict.get("title", "video"),
-            "filename": os.path.basename(video_filename)
-        }
-    except Exception as e:
-        error_msg = str(e)
-        if "HTTP Error 429" in error_msg:
-            error_msg = "YouTube rate limit exceeded. Try again later."
-        elif "HTTP Error 403" in error_msg:
-            error_msg = "Access denied. Cookies may be invalid or expired."
-        elif "This content isn't available" in error_msg:
-            error_msg = "Content unavailable (private/removed/geoblocked)"
-        
-        print(f"Download failed: {error_msg}")
-        raise HTTPException(
-            status_code=500,
-            detail=error_msg
-        )
+@app.get("/download/{filename}")
+async def serve_file(filename: str):
+    """Serve downloaded files"""
+    if not os.path.exists(filename):
+        raise HTTPException(404, "File not found")
+    return FileResponse(filename)
 
-# ... [keep your existing /api/clip and /api/download-file endpoints unchanged] ...
-
+# Startup
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        app,
+        "app:app",
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)))
+        port=int(os.environ.get("PORT", 8000)),
+        workers=2,
+        timeout_keep_alive=60
+    )
