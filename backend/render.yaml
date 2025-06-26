@@ -1,18 +1,9 @@
 services:
   - type: web
-    name: youtube-downloader-backend
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn app:app --host 0.0.0.0 --port 10000"
-    plan: free
+    name: fastapi-app
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.10
-    autoDeploy: true
-    healthCheckPath: /docs
-    
-# This file configures the FastAPI backend for deployment on Render.com
-# - Exposes the API on port 10000
-# - Installs dependencies from requirements.txt
-# - Health check uses the FastAPI docs endpoint
-# - Adjust plan, env, and commands as needed for your project
+      - key: PORT
+        value: 10000
