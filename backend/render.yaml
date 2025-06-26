@@ -2,7 +2,6 @@ services:
   - type: web
     name: youtube-downloader
     runtime: python
-    pythonVersion: "3.10"  # Explicitly use Python 3.10
     buildCommand: |
       pip install -r requirements.txt
       mkdir -p downloads
