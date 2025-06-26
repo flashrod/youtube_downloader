@@ -2,12 +2,13 @@ services:
   - type: web
     name: youtube-downloader
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 2
+    pythonVersion: "3.10"  # Explicitly use Python 3.10
+    buildCommand: |
+      pip install -r requirements.txt
+      mkdir -p downloads
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     env:
       - key: PORT
         value: 10000
-      - key: YT_COOKIES_B64
-        value: your_base64_encoded_cookies_here
       - key: PYTHONUNBUFFERED
         value: 1
