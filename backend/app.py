@@ -1,6 +1,4 @@
 import os
-import base64
-import tempfile
 import time
 import random
 import logging
